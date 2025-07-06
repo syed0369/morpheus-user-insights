@@ -5,34 +5,8 @@ from neo4j import GraphDatabase
 import plotly.graph_objects as go
 import datetime
 from itertools import product
-from dotenv import load_dotenv
 import os
-
-# Load environment variables from .env
-load_dotenv()
-# --- Neo4j Connection ---
-@st.cache_data
-def load_activity_data():
-    uri = st.secrets["NEO4J_URI"]
-    user = st.secrets["NEO4J_USER"]
-    password = st.secrets["NEO4J_PASSWORD"]
-
-    driver = GraphDatabase.driver(uri, auth=(user, password))
-
-    def fetch_data(tx):
-        query = """
-        MATCH (t:Tenant)-[:HAS]->(u:User)-[:PERFORMED]->(a:Action)
-        RETURN t.name AS tenant, u.username AS username, 
-               a.type AS type, a.ts AS ts, a.name AS name, 
-               a.message AS message, a.objecttype AS objecttype, a.id AS id
-        """
-        return pd.DataFrame(tx.run(query).data())
-
-    with driver.session() as session:
-        df = session.execute_read(fetch_data)
-
-    driver.close()
-    return df
+from load_data import load_activity_data
 
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="📊 Morpheus Activity Dashboard", layout="wide")
@@ -40,7 +14,6 @@ st.title("📊 Morpheus Activity Dashboard")
 
 # --- Load Data ---
 df = load_activity_data()
-df["ts"] = pd.to_datetime(df["ts"])
 df["date"] = df["ts"].dt.date
 
 # --- Sidebar Filters ---
@@ -64,7 +37,7 @@ filtered_df = df[
     (df["tenant"].isin(selected_tenants)) &
     (df["date"] >= date_range[0]) &
     (df["date"] <= date_range[1])
-]
+].copy()
 
 # --- Activity Timeline with Annotated Latest Activities ---
 st.subheader("Tenant Wize Activity Timeline")
@@ -149,7 +122,7 @@ st.plotly_chart(fig, use_container_width=True)
 
 # --- Daily activity chart ---
 available_weeks = pivot.index.astype(str).tolist()
-st.subheader("🔍 View Daily Activity Across Tenants")
+st.subheader("View Daily Activity Across Tenants")
 select_all = st.checkbox("Select All Weeks", value=False)
 
 if select_all:
@@ -260,7 +233,7 @@ for tenant in top_users["tenant"].unique():
                     full_counts,
                     x="weekday",
                     y="count",
-                    title=f"📅 Weekday Activity for {row['username']} in {tenant}",
+                    title=f"Weekday Activity for {row['username']} in {tenant}",
                     category_orders={"weekday": weekday_order},
                     labels={"count": "Action Count", "weekday": "Weekday"},
                     height=400
@@ -271,3 +244,180 @@ for tenant in top_users["tenant"].unique():
                     font_color="white"
                 )
                 st.plotly_chart(fig_user, use_container_width=True)
+
+@st.cache_data
+def fetch_run_data(uri, user, password):
+    driver = GraphDatabase.driver(uri, auth=(user, password))
+
+    def query_runs(tx):
+        query = """
+        MATCH (t:Tenant)<-[:BELONGS_TO]-(:User)-[:PERFORMED]->(:Action)-[:PROVISIONS]->(i:Instance)-[:HAS_RUN]->(r:Run)
+        RETURN 
+            t.name AS tenant,
+            r.start_date AS start,
+            r.end_date AS end,
+            r.avg_cpu_usage_percent AS avg_cpu,
+            i.id AS instance_id
+        """
+        result = tx.run(query)
+        records = []
+        for record in result:
+            if record["start"] and record["end"]:
+                records.append({
+                    "tenant": record["tenant"],
+                    "start": record["start"].to_native(),
+                    "end": record["end"].to_native(),
+                    "avg_cpu": float(record["avg_cpu"]) if record["avg_cpu"] is not None else 0.0,
+                    "instance_id": record["instance_id"]
+                })
+        return pd.DataFrame(records)
+
+    with driver.session() as session:
+        df = session.execute_read(query_runs)
+    driver.close()
+    return df
+
+# --- Instance Count (filtered on selected tenants only) ---
+@st.cache_data
+def fetch_instance_counts(uri, user, password):
+    driver = GraphDatabase.driver(uri, auth=(user, password))
+
+    def query_instances(tx):
+        query = """
+        MATCH (t:Tenant)<-[:BELONGS_TO]-(:User)-[:PERFORMED]->(:Action)-[:PROVISIONS]->(i:Instance)
+        RETURN 
+            t.name AS tenant,
+            i.id AS instance_id,
+            i.instance_type AS instance_type
+        """
+        result = tx.run(query)
+        return pd.DataFrame([dict(r) for r in result])
+
+    with driver.session() as session:
+        df = session.execute_read(query_instances)
+    driver.close()
+    return df
+
+instance_df = fetch_instance_counts(
+    uri=os.getenv("NEO4J_URI"),
+    user=os.getenv("NEO4J_USER"),
+    password=os.getenv("NEO4J_PASSWORD")
+)
+
+# Show filtered instance count summary
+filtered_instance_df = instance_df[instance_df["tenant"].isin(selected_tenants)]
+print(filtered_instance_df.groupby("tenant")["instance_id"].nunique().reset_index())
+if not filtered_instance_df.empty:
+    instance_count_summary = filtered_instance_df.groupby("tenant")["instance_id"].nunique().reset_index()
+    instance_count_summary.columns = ["Tenant", "Total Instances"]
+    st.markdown("### Total Instances per Tenant")
+    st.dataframe(instance_count_summary, use_container_width=True)
+
+    # --- Instance Type Distribution ---
+    st.subheader("Total Instance Type Distribution")
+    instance_type_counts = (
+        filtered_instance_df.groupby(["instance_type", "tenant"])["instance_id"]
+        .nunique()
+        .reset_index(name="count")
+    )
+
+    if not instance_type_counts.empty:
+        fig_type = px.bar(
+            instance_type_counts,
+            x="instance_type",
+            y="count",
+            color="tenant",
+            barmode="group",
+            title="Instance Types Per Tenant",
+            labels={"instance_type": "Instance Type", "count": "Instance Count", "tenant": "Tenant"},
+            height=500
+        )
+
+        fig_type.update_layout(
+            xaxis_tickangle=-45,
+            plot_bgcolor="#111111",
+            paper_bgcolor="#111111",
+            font_color="white"
+        )
+        st.plotly_chart(fig_type, use_container_width=True)
+    else:
+        st.info("No instance types found for selected tenants.")
+
+# --- Gantt Chart ---
+st.subheader("Tenant-Level Gantt Chart of Runs (Avg CPU %) Per Week")
+
+runs_df = fetch_run_data(
+    uri=os.getenv("NEO4J_URI"),
+    user=os.getenv("NEO4J_USER"),
+    password=os.getenv("NEO4J_PASSWORD")
+)
+
+if not runs_df.empty:
+    runs_df = runs_df[runs_df["tenant"].isin(selected_tenants)].copy()
+    runs_df["week_start"] = runs_df["start"] - pd.to_timedelta(runs_df["start"].dt.weekday, unit="D")
+    runs_df["week_start"] = runs_df["week_start"].dt.date.astype(str)
+
+    week_filter = selected_weeks if not select_all else available_weeks
+    filtered_runs = runs_df[
+        (runs_df["week_start"].isin(week_filter)) &
+        (
+            ((runs_df["start"].dt.date >= date_range[0]) & (runs_df["start"].dt.date <= date_range[1])) |
+            ((runs_df["end"].dt.date >= date_range[0]) & (runs_df["start"].dt.date <= date_range[1]))
+        )
+    ].copy()
+
+    if not filtered_runs.empty:
+        tenant_instance_counts = (
+            instance_df.groupby("tenant")["instance_id"]
+            .nunique()
+            .reset_index()
+            .rename(columns={"instance_id": "total_instances"})
+        )
+
+        cpu_summary = (
+            filtered_runs.groupby(["tenant", "week_start"])
+            .agg(
+                total_cpu=("avg_cpu", "sum"),
+                start=("start", "min"),
+                end=("end", "max"),
+                running_instances=("instance_id", pd.Series.nunique)
+            )
+            .reset_index()
+        )
+
+        tenant_summary = pd.merge(cpu_summary, tenant_instance_counts, on="tenant", how="left")
+        tenant_summary["avg_cpu"] = (
+            tenant_summary["total_cpu"] / tenant_summary["total_instances"]
+        ).fillna(0)
+
+        fig = px.timeline(
+            tenant_summary,
+            x_start="start",
+            x_end="end",
+            y="tenant",
+            color="avg_cpu",
+            color_continuous_scale="Viridis",
+            labels={"avg_cpu": "Avg CPU (%)"},
+            title="Tenant Run Activity Timeline (Avg CPU % per Week)",
+            hover_data={
+                "start": True,
+                "end": True,
+                "avg_cpu": True,
+                "total_instances": True,
+                "running_instances": True
+            }
+        )
+
+        fig.update_yaxes(autorange="reversed")
+        fig.update_layout(
+            height=600,
+            plot_bgcolor="#111111",
+            paper_bgcolor="#111111",
+            font_color="white",
+            coloraxis_colorbar=dict(title="Avg CPU %")
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No run data available for selected filters.")
+else:
+    st.warning("No run data found in the database.")
