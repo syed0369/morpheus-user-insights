@@ -9,9 +9,9 @@ load_dotenv()
 @st.cache_data
 def load_activity_data():
     
-    uri = os.getenv("NEO4J_URI")
-    user = os.getenv("NEO4J_USER")
-    password = os.getenv("NEO4J_PASSWORD")
+    uri = st.secrets["NEO4J_URI"]
+    user = st.secrets["NEO4J_USER"]
+    password = st.secrets["NEO4J_PASSWORD"]
     
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
@@ -53,9 +53,9 @@ def load_activity_data():
 @st.cache_data
 def fetch_run_data():
 
-    uri = os.getenv("NEO4J_URI")
-    user = os.getenv("NEO4J_USER")
-    password = os.getenv("NEO4J_PASSWORD")
+    uri = st.secrets["NEO4J_URI"]
+    user = st.secrets["NEO4J_USER"]
+    password = st.secrets["NEO4J_PASSWORD"]
     
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
@@ -90,9 +90,9 @@ def fetch_run_data():
 @st.cache_data
 def fetch_instance_counts():
 
-    uri = os.getenv("NEO4J_URI")
-    user = os.getenv("NEO4J_USER")
-    password = os.getenv("NEO4J_PASSWORD")
+    uri = st.secrets["NEO4J_URI"]
+    user = st.secrets["NEO4J_USER"]
+    password = st.secrets["NEO4J_PASSWORD"]
 
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
