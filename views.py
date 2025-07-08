@@ -4,7 +4,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import datetime
 from itertools import product
-from load_data import load_activity_data, fetch_instance_counts, fetch_run_data
+import json
+from load_data import load_activity_data, fetch_instance_counts, fetch_run_data, fetch_execution_data, fetch_temporal_activity_data, get_temporal_insights_from_ai, prepare_llm_friendly_json
 
 # --- Streamlit UI Setup ---
 def setup():
@@ -14,8 +15,21 @@ def setup():
 # --- Load Data ---
 def load_data():
     df = load_activity_data()
-    df["date"] = df["ts"].dt.date
-    return df
+    exec_df = fetch_execution_data()
+
+    # Normalize both to have similar fields for merging
+    df["source"] = "Action"
+    exec_df["source"] = "Execution"
+    exec_df["type"] = exec_df["process_type"]
+    exec_df["message"] = "Job: " + exec_df["job_name"] + " | Status: " + exec_df["status"]
+    exec_df = exec_df[["tenant", "username", "type", "ts", "message", "source"]]
+
+    df = df[["tenant", "username", "type", "ts", "message", "source"]]
+
+    combined_df = pd.concat([df, exec_df], ignore_index=True)
+    combined_df["date"] = combined_df["ts"].dt.date
+    return combined_df
+
 # --- Sidebar Filters ---
 def setup_sidebar(df):
     st.sidebar.header("Filters")
@@ -385,3 +399,23 @@ def display_tenant_gantt_chart(selected_tenants, date_range, selected_weeks, ava
             st.info("No run data available for selected filters.")
     else:
         st.warning("No run data found in the database.")
+
+def insights(selected_tenants):
+    with st.expander("🧠 Tenant-wise Temporal Behavior Insights (AI Generated)"):
+        tenants = selected_tenants if selected_tenants else None
+        temp_df = fetch_temporal_activity_data(tenants)
+
+        if temp_df.empty:
+            st.warning("No temporal activity data found for the selected tenants.")
+            return
+
+        tenant_payloads = prepare_llm_friendly_json(temp_df)
+
+        for tenant_name, payload in tenant_payloads.items():
+            payload_json = json.dumps(payload, indent=2)
+
+            with st.spinner(f"Analyzing behavior for {tenant_name}..."):
+                insight = get_temporal_insights_from_ai(payload_json)
+
+            with st.expander(f"🔹 {tenant_name} Insights"):
+                st.markdown(insight)
