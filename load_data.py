@@ -8,7 +8,7 @@ from openai import OpenAI
 
 load_dotenv()
 
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_API_KEY
@@ -17,9 +17,9 @@ client = OpenAI(
 @st.cache_data
 def load_activity_data():
     
-    uri = os.getenv("NEO4J_URI")
-    user = os.getenv("NEO4J_USER")
-    password = os.getenv("NEO4J_PASSWORD")
+    uri = st.secrets["NEO4J_URI"]
+    user = st.secrets["NEO4J_USER"]
+    password = st.secrets["NEO4J_PASSWORD"]
     
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
@@ -61,9 +61,9 @@ def load_activity_data():
 @st.cache_data
 def fetch_run_data():
 
-    uri = os.getenv("NEO4J_URI")
-    user = os.getenv("NEO4J_USER")
-    password = os.getenv("NEO4J_PASSWORD")
+    uri = st.secrets["NEO4J_URI"]
+    user = st.secrets["NEO4J_USER"]
+    password = st.secrets["NEO4J_PASSWORD"]
     
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
@@ -98,9 +98,9 @@ def fetch_run_data():
 @st.cache_data
 def fetch_instance_counts():
 
-    uri = os.getenv("NEO4J_URI")
-    user = os.getenv("NEO4J_USER")
-    password = os.getenv("NEO4J_PASSWORD")
+    uri = st.secrets["NEO4J_URI"]
+    user = st.secrets["NEO4J_USER"]
+    password = st.secrets["NEO4J_PASSWORD"]
 
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
@@ -123,9 +123,9 @@ def fetch_instance_counts():
 
 @st.cache_data
 def fetch_execution_data():
-    uri = os.getenv("NEO4J_URI")
-    user = os.getenv("NEO4J_USER")
-    password = os.getenv("NEO4J_PASSWORD")
+    uri = st.secrets["NEO4J_URI"]
+    user = st.secrets["NEO4J_USER"]
+    password = st.secrets["NEO4J_PASSWORD"]
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
     def query_executions(tx):
@@ -161,9 +161,9 @@ def fetch_temporal_activity_data(selected_tenants=None):
     from neo4j import GraphDatabase
     import os
 
-    uri = os.getenv("NEO4J_URI")
-    user = os.getenv("NEO4J_USER")
-    password = os.getenv("NEO4J_PASSWORD")
+    uri = st.secrets["NEO4J_URI"]
+    user = st.secrets["NEO4J_USER"]
+    password = st.secrets["NEO4J_PASSWORD"]
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
     def run_query(tx):
@@ -239,4 +239,3 @@ def get_temporal_insights_from_ai(payload_json):
         return response.choices[0].message.content
     except Exception as e:
         return f"⚠️ Failed to fetch insights: {e}"
-
