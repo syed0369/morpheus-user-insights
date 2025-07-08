@@ -8,12 +8,6 @@ from openai import OpenAI
 
 load_dotenv()
 
-OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY
-)
-
 @st.cache_data
 def load_activity_data():
     
@@ -224,6 +218,11 @@ def prepare_llm_friendly_json(df):
 
 def get_temporal_insights_from_ai(payload_json):
     try:
+        OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=OPENROUTER_API_KEY
+        )
         prompt = (
             "Analyze the following tenant activity logs which include timestamped actions and job executions.\n"
             "Look for hidden patterns, anomalies (e.g., failed jobs, usage gaps), night-time activity, or inefficiencies.\n\n"
