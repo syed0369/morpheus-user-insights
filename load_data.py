@@ -2,9 +2,8 @@ import streamlit as st
 import pandas as pd
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
-import os
-import json
-import openai
+import streamlit as st
+import requests
 
 load_dotenv()
 
@@ -217,25 +216,40 @@ def prepare_llm_friendly_json(df):
     return tenant_map
 
 def get_temporal_insights_from_ai(payload_json):
+    
     try:
         OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
-        client = openai.OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=OPENROUTER_API_KEY
-        )
-        st.write("API Key loaded:", st.secrets["OPENROUTER_API_KEY"][:10] + "...")
         prompt = (
             "Analyze the following tenant activity logs which include timestamped actions and job executions.\n"
             "Look for hidden patterns, anomalies (e.g., failed jobs, usage gaps), night-time activity, or inefficiencies.\n\n"
             f"{payload_json}"
         )
 
-        response = client.chat.completions.create(
-            model="deepseek/deepseek-chat-v3-0324:free",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.5
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        data = {
+            "model": "deepseek/deepseek-chat-v3-0324:free",
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.5
+        }
+
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=data
         )
 
-        return response.choices[0].message.content
+        if response.status_code != 200:
+            return f"❌ Error code {response.status_code}: {response.text}"
+
+        # Parse the JSON and return the model's message
+        return response.json()["choices"][0]["message"]["content"]
+
     except Exception as e:
         return f"⚠️ Failed to fetch insights: {e}"
+
