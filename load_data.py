@@ -4,7 +4,7 @@ from neo4j import GraphDatabase
 from dotenv import load_dotenv
 import os
 import json
-from openai import OpenAI
+import openai
 
 load_dotenv()
 
@@ -219,7 +219,7 @@ def prepare_llm_friendly_json(df):
 def get_temporal_insights_from_ai(payload_json):
     try:
         OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
-        client = OpenAI(
+        client = openai.OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=OPENROUTER_API_KEY
         )
