@@ -2,17 +2,17 @@ import streamlit as st
 import pandas as pd
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
-import streamlit as st
-import requests
+import os
+from openai import OpenAI
 
 load_dotenv()
 
 @st.cache_data
 def load_activity_data():
     
-    uri = st.secrets["NEO4J_URI"]
-    user = st.secrets["NEO4J_USER"]
-    password = st.secrets["NEO4J_PASSWORD"]
+    uri = os.getenv("NEO4J_URI")
+    user = os.getenv("NEO4J_USER")
+    password = os.getenv("NEO4J_PASSWORD")
     
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
@@ -54,9 +54,9 @@ def load_activity_data():
 @st.cache_data
 def fetch_run_data():
 
-    uri = st.secrets["NEO4J_URI"]
-    user = st.secrets["NEO4J_USER"]
-    password = st.secrets["NEO4J_PASSWORD"]
+    uri = os.getenv("NEO4J_URI")
+    user = os.getenv("NEO4J_USER")
+    password = os.getenv("NEO4J_PASSWORD")
     
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
@@ -91,9 +91,9 @@ def fetch_run_data():
 @st.cache_data
 def fetch_instance_counts():
 
-    uri = st.secrets["NEO4J_URI"]
-    user = st.secrets["NEO4J_USER"]
-    password = st.secrets["NEO4J_PASSWORD"]
+    uri = os.getenv("NEO4J_URI")
+    user = os.getenv("NEO4J_USER")
+    password = os.getenv("NEO4J_PASSWORD")
 
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
@@ -116,9 +116,9 @@ def fetch_instance_counts():
 
 @st.cache_data
 def fetch_execution_data():
-    uri = st.secrets["NEO4J_URI"]
-    user = st.secrets["NEO4J_USER"]
-    password = st.secrets["NEO4J_PASSWORD"]
+    uri = os.getenv("NEO4J_URI")
+    user = os.getenv("NEO4J_USER")
+    password = os.getenv("NEO4J_PASSWORD")
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
     def query_executions(tx):
@@ -154,9 +154,9 @@ def fetch_temporal_activity_data(selected_tenants=None):
     from neo4j import GraphDatabase
     import os
 
-    uri = st.secrets["NEO4J_URI"]
-    user = st.secrets["NEO4J_USER"]
-    password = st.secrets["NEO4J_PASSWORD"]
+    uri = os.getenv("NEO4J_URI")
+    user = os.getenv("NEO4J_USER")
+    password = os.getenv("NEO4J_PASSWORD")
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
     def run_query(tx):
@@ -216,40 +216,24 @@ def prepare_llm_friendly_json(df):
     return tenant_map
 
 def get_temporal_insights_from_ai(payload_json):
-    
     try:
-        OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
+        OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=OPENROUTER_API_KEY
+        )
         prompt = (
             "Analyze the following tenant activity logs which include timestamped actions and job executions.\n"
             "Look for hidden patterns, anomalies (e.g., failed jobs, usage gaps), night-time activity, or inefficiencies.\n\n"
             f"{payload_json}"
         )
 
-        headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-
-        data = {
-            "model": "deepseek/deepseek-chat-v3-0324:free",
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.5
-        }
-
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=data
+        response = client.chat.completions.create(
+            model="deepseek/deepseek-chat-v3-0324:free",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5
         )
 
-        if response.status_code != 200:
-            return f"❌ Error code {response.status_code}: {response.text}"
-
-        # Parse the JSON and return the model's message
-        return response.json()["choices"][0]["message"]["content"]
-
+        return response.choices[0].message.content
     except Exception as e:
         return f"⚠️ Failed to fetch insights: {e}"
-

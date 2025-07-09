@@ -21,7 +21,7 @@ def load_data():
     df["source"] = "Action"
     exec_df["source"] = "Execution"
     exec_df["type"] = exec_df["process_type"]
-    exec_df["message"] = "Job: " + exec_df["job_name"] + " | Status: " + exec_df["status"]
+    exec_df["message"] = "Job: " + exec_df["job_name"] + " executed | Status: " + exec_df["status"]
     exec_df = exec_df[["tenant", "username", "type", "ts", "message", "source"]]
 
     df = df[["tenant", "username", "type", "ts", "message", "source"]]
