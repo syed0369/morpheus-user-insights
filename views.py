@@ -250,58 +250,157 @@ def display_top_active_users(combined_daywise):
                     )
                     st.plotly_chart(fig_user, use_container_width=True)
 
-
-def instance_type_distribution(selected_tenants):
-    
+# --- Instance Type Distribution ---
+def instance_type_distribution(selected_tenants, date_range, selected_weeks, available_weeks, select_all):
     instance_df = fetch_instance_counts()
 
-    # Show filtered instance count summary
-    filtered_instance_df = instance_df[instance_df["tenant"].isin(selected_tenants)]
-    if not filtered_instance_df.empty:
-        instance_count_summary = filtered_instance_df.groupby("tenant")["instance_id"].nunique().reset_index()
-        instance_count_summary.columns = ["Tenant", "Total Instances"]
-        st.markdown("### Total Instances per Tenant")
-        st.dataframe(instance_count_summary, use_container_width=True)
+    if instance_df.empty:
+        st.warning("No instance action data found.")
+        return
 
-        # --- Instance Type Distribution ---
-        st.subheader("Total Instance Type Distribution")
-        
-        instance_type_counts = (
-            filtered_instance_df.groupby(["tenant", "instance_type"])["instance_id"]
-            .nunique()
-            .reset_index(name="count")
+    instance_df["action_ts"] = pd.to_datetime(instance_df["action_ts"])
+    instance_df["date"] = instance_df["action_ts"].dt.date
+    instance_df["week_start"] = instance_df["action_ts"] - pd.to_timedelta(instance_df["action_ts"].dt.weekday, unit="D")
+    instance_df["week_start"] = instance_df["week_start"].dt.date.astype(str)
+    instance_df["action_type"] = instance_df["action_type"].str.upper()
+    instance_df = instance_df[instance_df["tenant"].isin(selected_tenants)]
+
+    week_filter = selected_weeks if not select_all else available_weeks
+
+    provisioned_df = instance_df[
+        (instance_df["action_type"] == "PROVISIONS") &
+        (instance_df["date"] >= date_range[0]) &
+        (instance_df["date"] <= date_range[1])
+    ]
+
+    deleted_df = instance_df[
+        (instance_df["action_type"] == "DELETES") &
+        (instance_df["date"] >= date_range[0]) &
+        (instance_df["date"] <= date_range[1])
+    ]
+
+    cumulative_df = provisioned_df[~provisioned_df["instance_id"].isin(deleted_df["instance_id"])]
+
+    weekly_df = instance_df[
+        (instance_df["week_start"].isin(week_filter)) &
+        (instance_df["date"] >= date_range[0]) &
+        (instance_df["date"] <= date_range[1])
+    ]
+
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 8px;'>
+            <h3 style='margin: 0;'>Total Instances per Tenant</h3>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # --- Summary Table ---
+    summary_data = []
+    for tenant in selected_tenants:
+        total_instances = cumulative_df[cumulative_df["tenant"] == tenant]["instance_id"].nunique()
+        tenant_week_df = weekly_df[weekly_df["tenant"] == tenant]
+        provisioned = tenant_week_df[tenant_week_df["action_type"] == "PROVISIONS"]["instance_id"].nunique()
+        deleted = tenant_week_df[tenant_week_df["action_type"] == "DELETES"]["instance_id"].nunique()
+
+        formatted = (
+            f"{total_instances}  "
+            f"<span style='color:limegreen'>+{provisioned}</span> "
+            f"<span style='color:red'>-{deleted}</span>"
         )
 
-        total_by_tenant = instance_type_counts.groupby("tenant")["count"].transform("sum")
-        instance_type_counts["percent"] = (instance_type_counts["count"] / total_by_tenant * 100).round(2)
+        summary_data.append({"Tenant": tenant, "Total Instances": formatted})
 
-        view_mode = st.radio("Select View Mode:", ["Absolute Count", "Percentage"])
-        y_col = "count" if view_mode == "Absolute Count" else "percent"
+    styled_df = pd.DataFrame(summary_data)
+    table_html = styled_df.to_html(
+        escape=False,
+        index=False,
+        classes="styled-instance-table"
+    )
 
-        fig_type = px.bar(
-            instance_type_counts,
-            x="instance_type",
-            y=y_col,
-            color="tenant",
-            barmode="group",
-            labels={
-                "instance_type": "Instance Type",
-                "count": "Instance Count",
-                "percent": "Percentage",
-                "tenant": "Tenant"
-            },
-            title=f"Instance Types per Tenant ({view_mode})",
-            height=500
-        )
+    st.markdown("""
+        <style>
+            .styled-instance-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 16px;
+            }
+            .styled-instance-table th, .styled-instance-table td {
+                border: 1px solid #444;
+                padding: 10px 16px;
+                text-align: left;
+            }
+            .styled-instance-table th {
+                background-color: #222;
+                color: white;
+            }
+            .styled-instance-table tr:nth-child(even) {
+                background-color: #1e1e1e;
+            }
+            .styled-instance-table tr:nth-child(odd) {
+                background-color: #111111;
+            }
+        </style>
+    """, unsafe_allow_html=True)
 
-        fig_type.update_layout(
-            xaxis_tickangle=-45,
-            plot_bgcolor="#111111",
-            paper_bgcolor="#111111",
-            font_color="white"
-        )
+    st.markdown(table_html, unsafe_allow_html=True)
 
-        st.plotly_chart(fig_type, use_container_width=True)
+    col1, col2 = st.columns([0.8, 0.2])
+    with col1:
+        st.subheader("Filtered Instance Type Distribution")
+    with col2:
+        show_deleted = st.checkbox("Include Deleted", value=False)
+
+    filtered_prov_df = provisioned_df.copy()
+    filtered_prov_df["status"] = "Provisioned"
+
+    if show_deleted:
+        filtered_del_df = deleted_df.copy()
+        filtered_del_df["status"] = "Deleted"
+        combined_df = pd.concat([filtered_prov_df, filtered_del_df], ignore_index=True)
+    else:
+        combined_df = filtered_prov_df
+
+    instance_type_counts = (
+        combined_df
+        .groupby(["tenant", "instance_type", "status"])["instance_id"]
+        .nunique()
+        .reset_index(name="count")
+    )
+
+    view_mode = st.radio("Select View Mode:", ["Absolute Count", "Percentage"])
+    if view_mode == "Percentage":
+        total_per_group = instance_type_counts.groupby(["tenant", "status"])["count"].transform("sum")
+        instance_type_counts["percent"] = (instance_type_counts["count"] / total_per_group * 100).round(2)
+        y_col = "percent"
+    else:
+        y_col = "count"
+    
+    fig_type = px.bar(
+        instance_type_counts,
+        x="instance_type",
+        y=y_col,
+        color="tenant",
+        pattern_shape="status" if show_deleted else None,
+        pattern_shape_sequence=["", "/"],
+        barmode="group",
+        labels={
+            "instance_type": "Instance Type",
+            "tenant": "Tenant",
+            "count": "Instance Count",
+            "percent": "Percentage",
+            "status": "Status"
+        },
+        title=f"Instance Types per Tenant ({'with Deleted' if show_deleted else 'Provisioned Only'})",
+        height=500
+    )
+
+    fig_type.update_layout(
+        xaxis_tickangle=-45,
+        plot_bgcolor="#111111",
+        paper_bgcolor="#111111",
+        font_color="white"
+    )
+
+    st.plotly_chart(fig_type, use_container_width=True)
 
 # --- Gantt Chart ---
 def display_tenant_gantt_chart(selected_tenants, date_range, selected_weeks, available_weeks, select_all):
@@ -382,6 +481,7 @@ def display_tenant_gantt_chart(selected_tenants, date_range, selected_weeks, ava
     else:
         st.warning("No run data found in the database.")
 
+# --- Insights Section ---
 def insights(selected_tenants):
     with st.expander("🧠 Tenant-wise Temporal Behavior Insights (AI Generated)"):
         tenants = selected_tenants if selected_tenants else None
@@ -401,3 +501,73 @@ def insights(selected_tenants):
 
             with st.expander(f"🔹 {tenant_name} Insights"):
                 st.markdown(insight)
+
+# --- BCG Matrix ---
+def display_bcg_matrix():
+    st.subheader("BCG Matrix: User VM Provisioning vs CPU Usage")
+
+    inst_df = fetch_instance_counts()
+    run_df = fetch_run_data()
+
+    if inst_df.empty:
+        st.warning("No instance action data available.")
+        return
+
+    inst_df = inst_df[inst_df["action_type"] == "PROVISIONS"]
+    inst_df = inst_df[["tenant", "username", "instance_id"]].dropna().drop_duplicates()
+
+    provision_counts = (
+        inst_df.groupby(["tenant", "username"])
+        .agg(num_vms=("instance_id", "nunique"))
+        .reset_index()
+    )
+
+    run_df["start"] = pd.to_datetime(run_df["start"])
+    run_df = run_df[["tenant", "instance_id", "avg_cpu"]]
+
+    merged = pd.merge(inst_df, run_df, on=["tenant", "instance_id"], how="left")
+
+    cpu_usage = (
+        merged.groupby(["tenant", "username"])
+        .agg(avg_cpu=("avg_cpu", "mean"))
+        .reset_index()
+    )
+
+    user_stats = pd.merge(provision_counts, cpu_usage, on=["tenant", "username"], how="outer")
+
+    user_stats["num_vms"] = user_stats["num_vms"].fillna(0).astype(int)
+    user_stats["avg_cpu"] = user_stats["avg_cpu"].fillna(0)
+
+    if user_stats.empty:
+        st.info("No user activity found.")
+        return
+    
+    fig = px.scatter(
+        user_stats,
+        x="num_vms",
+        y="avg_cpu",
+        color="tenant",
+        hover_data=["username", "num_vms", "avg_cpu"],
+        labels={
+            "num_vms": "VMs Provisioned",
+            "avg_cpu": "Avg CPU Usage (%)"
+        },
+        title="BCG Matrix: Users by VM Count and Avg CPU Usage",
+        height=600
+    )
+    fig.update_traces(marker=dict(size=12))
+    x_median = user_stats["num_vms"].median()
+    y_median = user_stats["avg_cpu"].median()
+
+    fig.add_shape(type="line", x0=x_median, x1=x_median, y0=0, y1=user_stats["avg_cpu"].max(),
+                  line=dict(dash="dot", color="white"))
+    fig.add_shape(type="line", x0=0, x1=user_stats["num_vms"].max(), y0=y_median, y1=y_median,
+                  line=dict(dash="dot", color="white"))
+
+    fig.update_layout(
+        plot_bgcolor="#111111",
+        paper_bgcolor="#111111",
+        font_color="white"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)

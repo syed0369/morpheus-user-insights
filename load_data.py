@@ -21,6 +21,7 @@ def load_activity_data():
         MATCH (u:User)-[:BELONGS_TO]->(t:Tenant)
         MATCH (u)-[:PERFORMED]->(a:Action)
         OPTIONAL MATCH (a)-[:PROVISIONS]->(i:Instance)
+        OPTIONAL MATCH (a)-[:DELETES]->(i:Instance)
         RETURN 
             t.name AS tenant, 
             u.username AS username, 
@@ -86,22 +87,35 @@ def fetch_run_data():
 
 @st.cache_data
 def fetch_instance_counts():
-
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
     def query_instances(tx):
         query = """
-        MATCH (t:Tenant)<-[:BELONGS_TO]-(:User)-[:PERFORMED]->(:Action)-[:PROVISIONS]->(i:Instance)
+        MATCH (t:Tenant)<-[:BELONGS_TO]-(u:User)-[:PERFORMED]->(a:Action)-[r]->(i:Instance)
+        WHERE type(r) IN ['PROVISIONS', 'DELETES']
         RETURN 
             t.name AS tenant,
+             u.username AS username,
             i.id AS instance_id,
-            i.instance_type AS instance_type
+            i.instance_type AS instance_type,
+            a.ts AS action_ts,
+            type(r) AS action_type,
+            i.curr_status AS curr_status
         """
         result = tx.run(query)
-        return pd.DataFrame([dict(r) for r in result])
+        records = []
+        for record in result:
+            row = dict(record)
+            # Convert Neo4j DateTime to Python datetime
+            if "action_ts" in row and hasattr(row["action_ts"], "to_native"):
+                row["action_ts"] = row["action_ts"].to_native()
+            records.append(row)
+
+        return pd.DataFrame(records)
 
     with driver.session() as session:
         df = session.execute_read(query_instances)
+
     driver.close()
     return df
 
