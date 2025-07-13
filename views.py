@@ -5,30 +5,12 @@ import plotly.graph_objects as go
 import datetime
 from itertools import product
 import json
-from load_data import load_activity_data, fetch_instance_counts, fetch_run_data, fetch_execution_data, fetch_temporal_activity_data, get_temporal_insights_from_ai, prepare_llm_friendly_json
+from load_data import fetch_instance_counts, fetch_run_data, fetch_temporal_activity_data, get_temporal_insights_from_ai, prepare_llm_friendly_json
 
 # --- Streamlit UI Setup ---
 def setup():
     st.set_page_config(page_title="📊 Morpheus Activity Dashboard", layout="wide")
     st.title("📊 Morpheus Activity Dashboard")
-
-# --- Load Data ---
-def load_data():
-    df = load_activity_data()
-    exec_df = fetch_execution_data()
-
-    # Normalize both to have similar fields for merging
-    df["source"] = "Action"
-    exec_df["source"] = "Execution"
-    exec_df["type"] = exec_df["process_type"]
-    exec_df["message"] = "Job: " + exec_df["job_name"] + " executed | Status: " + exec_df["status"]
-    exec_df = exec_df[["tenant", "username", "type", "ts", "message", "source"]]
-
-    df = df[["tenant", "username", "type", "ts", "message", "source"]]
-
-    combined_df = pd.concat([df, exec_df], ignore_index=True)
-    combined_df["date"] = combined_df["ts"].dt.date
-    return combined_df
 
 # --- Sidebar Filters ---
 def setup_sidebar(df):
@@ -66,7 +48,7 @@ def display_activity_chart(filtered_df):
         x="ts",
         y="tenant",
         color="tenant",
-        hover_data=["message"],
+        hover_data=["message", "username"],
         title="Activity by Tenant Over Time",
         height=500
     )

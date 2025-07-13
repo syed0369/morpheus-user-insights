@@ -1,11 +1,12 @@
 import views
+from load_data import load_combined_data
 
 if __name__ == "__main__":
 
     views.setup()
-    df = views.load_data()
+    df = load_combined_data()
     selected_tenants, date_range = views.setup_sidebar(df)
-    views.insights(selected_tenants)
+    # views.insights(selected_tenants)
     filtered_df = views.filter_data(df, selected_tenants, date_range)
     views.display_activity_chart(filtered_df)
     pivot = views.display_weekly_activity(filtered_df)
