@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import requests
 import plotly.express as px
 import plotly.graph_objects as go
 import datetime
@@ -41,7 +42,7 @@ def filter_data(df, selected_tenants, date_range):
 
 # --- Activity Timeline with Annotated Latest Activities ---
 def display_activity_chart(filtered_df):
-    st.subheader("Tenant Wize Activity Timeline")
+    st.subheader("Tenant Wise Activity Timeline")
 
     fig = px.scatter(
         filtered_df,
@@ -571,3 +572,27 @@ def display_bcg_matrix():
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+def chatbot_ui(api_url="http://localhost:5000/rag"):
+    with st.expander("💬 Chatbot - Ask about tenant patterns & anomalies"):
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
+
+        # Show history inside expander
+        for msg in st.session_state.chat_history:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        user_query = st.chat_input("Ask your question here...")
+        if user_query:
+            st.session_state.chat_history.append({"role": "user", "content": user_query})
+
+            try:
+                resp = requests.post(api_url, json={"query": user_query, "mode": "hybrid"})
+                answer = resp.json().get("answer", "⚠️ No response from API.")
+            except Exception as e:
+                answer = f"⚠️ Error: {e}"
+
+            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            with st.chat_message("assistant"):
+                st.markdown(answer)

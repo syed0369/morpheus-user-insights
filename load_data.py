@@ -155,27 +155,87 @@ def fetch_execution_data():
 
 @st.cache_data
 def fetch_temporal_activity_data(selected_tenants=None):
-
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
     def run_query(tx):
         query = """
+        // 1. ACTIONS
         MATCH (t:Tenant)<-[:BELONGS_TO]-(u:User)
-        OPTIONAL MATCH (u)-[:PERFORMED]->(a:Action)
+        OPTIONAL MATCH (u)-[:PERFORMED]->(a:Action)-[:PROVISIONS]->(i:Instance)
+        WHERE $tenants IS NULL OR t.name IN $tenants
+        RETURN 
+        t.name AS tenant,
+        u.username AS user,
+        a.ts AS action_ts,
+        a.type AS action_type,
+        NULL AS exec_start,
+        NULL AS exec_duration,
+        NULL AS exec_status,
+        NULL AS exec_type,
+        NULL AS run_start,
+        NULL AS run_end,
+        NULL AS run_avg_cpu,
+        i.name AS instance_name,
+        i.id AS instance_id,
+        i.instance_type AS instance_type
+
+        UNION
+
+        // 2. EXECUTIONS
+        MATCH (t:Tenant)<-[:BELONGS_TO]-(u:User)
         OPTIONAL MATCH (u)-[:CREATED]->(j:Job)-[:HAS_EXECUTION]->(e:Execution)
         WHERE $tenants IS NULL OR t.name IN $tenants
         RETURN 
-            t.name AS tenant,
-            u.username AS user,
-            a.ts AS action_ts,
-            e.startDate AS exec_start,
-            e.duration AS exec_duration,
-            e.status AS exec_status,
-            e.type AS exec_type
-        ORDER BY t.name, u.username, action_ts, exec_start
+        t.name AS tenant,
+        u.username AS user,
+        NULL AS action_ts,
+        NULL AS action_type,
+        e.startDate AS exec_start,
+        e.duration AS exec_duration,
+        e.status AS exec_status,
+        e.type AS exec_type,
+        NULL AS run_start,
+        NULL AS run_end,
+        NULL AS run_avg_cpu,
+        NULL AS instance_name,
+        NULL AS instance_id,
+        NULL AS instance_type
+
+        UNION
+
+        // 3. RUNS
+        MATCH (t:Tenant)<-[:BELONGS_TO]-(u:User)
+        OPTIONAL MATCH (u)-[:PERFORMED]->(:Action)-[:PROVISIONS]->(i:Instance)-[:HAS_RUN]->(r:Run)
+        WHERE $tenants IS NULL OR t.name IN $tenants
+        RETURN 
+        t.name AS tenant,
+        u.username AS user,
+        NULL AS action_ts,
+        NULL AS action_type,
+        NULL AS exec_start,
+        NULL AS exec_duration,
+        NULL AS exec_status,
+        NULL AS exec_type,
+        r.start_date AS run_start,
+        r.end_date AS run_end,
+        r.avg_cpu_usage_percent AS run_avg_cpu,
+        i.name AS instance_name,
+        i.id AS instance_id,
+        i.instance_type AS instance_type
+
+        ORDER BY tenant, user, action_ts, exec_start, run_start
         """
         result = tx.run(query, tenants=selected_tenants)
-        return [dict(r) for r in result]
+        rows = []
+
+        for r in result:
+            record = dict(r)
+            for field in ["action_ts", "exec_start", "run_start", "run_end"]:
+                if field in record and hasattr(record[field], "to_native"):
+                    record[field] = record[field].to_native()
+            rows.append(record)
+
+        return rows
 
     with driver.session() as session:
         data = session.execute_read(run_query)
@@ -196,16 +256,31 @@ def prepare_llm_friendly_json(df):
             if pd.notna(row.get("action_ts")):
                 activity.append({
                     "type": "action",
-                    "ts": row["action_ts"].isoformat()
+                    "ts": row["action_ts"].isoformat(),
+                    "action_type": row.get("action_type"),
+                    "instance_name": row.get("instance_name"),
+                    "instance_id": row.get("instance_id"),
+                    "instance_type": row.get("instance_type")
                 })
             if pd.notna(row.get("exec_start")):
                 activity.append({
                     "type": "execution",
                     "start": row["exec_start"].isoformat(),
-                    "duration": row["exec_duration"],
-                    "status": row["exec_status"],
-                    "exec_type": row["exec_type"]
+                    "duration": row.get("exec_duration"),
+                    "status": row.get("exec_status"),
+                    "exec_type": row.get("exec_type")
                 })
+            if pd.notna(row.get("run_start")):
+                run_event = {
+                    "type": "run",
+                    "start": row["run_start"].isoformat(),
+                    "end": row["run_end"].isoformat() if pd.notna(row.get("run_end")) else None,
+                    "avg_cpu": row.get("run_avg_cpu"),
+                    "instance_name": row.get("instance_name"),
+                    "instance_id": row.get("instance_id"),
+                    "instance_type": row.get("instance_type")
+                }
+                activity.append(run_event)
 
         entry["users"].append({
             "user": user,
