@@ -15,4 +15,4 @@ if __name__ == "__main__":
     views.instance_type_distribution(selected_tenants, date_range, selected_weeks, available_weeks, select_all)
     views.display_tenant_gantt_chart(selected_tenants, date_range, selected_weeks, available_weeks, select_all)
     views.display_bcg_matrix()
-    views.chatbot_ui()
+    views.chatbot_ui(api_url="https://morpheus-user-insights.onrender.com")
