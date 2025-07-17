@@ -1,7 +1,7 @@
 import faiss
 import json
 import os
-import requests
+from openai import OpenAI
 from flask import Flask, request, jsonify
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
@@ -38,17 +38,19 @@ def retrieve_hybrid(query: str, top_k=3):
     return raw_results + summary_results
 
 def query_deepseek(prompt: str) -> str:
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": DEEPSEEK_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    resp = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-    resp.raise_for_status()
-    return resp.json()['choices'][0]['message']['content']
+
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=OPENROUTER_API_KEY
+    )
+
+    response = client.chat.completions.create(
+        model="deepseek/deepseek-chat-v3-0324:free",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.5
+    )
+
+    return response.choices[0].message.content
 
 def normal_chat(user_query: str) -> str:
     return query_deepseek(user_query)

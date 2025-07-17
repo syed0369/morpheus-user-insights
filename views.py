@@ -574,11 +574,10 @@ def display_bcg_matrix():
     st.plotly_chart(fig, use_container_width=True)
 
 def chatbot_ui(api_url="http://localhost:5000/rag"):
-    with st.expander("💬 Chatbot - Ask about tenant patterns & anomalies"):
+    with st.expander("💬 Chatbot - Ask about tenant patterns & anomalies", expanded=True):
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
 
-        # Show history inside expander
         for msg in st.session_state.chat_history:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
@@ -586,13 +585,19 @@ def chatbot_ui(api_url="http://localhost:5000/rag"):
         user_query = st.chat_input("Ask your question here...")
         if user_query:
             st.session_state.chat_history.append({"role": "user", "content": user_query})
+            with st.chat_message("user"):
+                st.markdown(user_query)
+
+            with st.chat_message("assistant"):
+                waiting_placeholder = st.empty()
+                waiting_placeholder.markdown("*Searching for insights...*")
 
             try:
-                resp = requests.post(api_url, json={"query": user_query, "mode": "hybrid"})
-                answer = resp.json().get("answer", "⚠️ No response from API.")
+                resp = requests.post(api_url, json={"query": user_query, "mode": "hybrid"}, timeout=60)
+                answer = resp.json().get("answer", "No response from API.")
             except Exception as e:
-                answer = f"⚠️ Error: {e}"
+                answer = f"Error: {e}"
+
+            waiting_placeholder.markdown(answer)
 
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
-            with st.chat_message("assistant"):
-                st.markdown(answer)
