@@ -26,6 +26,7 @@ def load_activity_data():
             t.name AS tenant, 
             u.username AS username, 
             a.type AS type, 
+            a.success AS status,
             a.ts AS ts, 
             i.name AS instance_name,
             i.id AS instance_id,
@@ -323,9 +324,9 @@ def load_combined_data():
     exec_df["source"] = "Execution"
     exec_df["type"] = exec_df["process_type"]
     exec_df["message"] = "Job: " + exec_df["job_name"] + " executed | Status: " + exec_df["status"]
-    exec_df = exec_df[["tenant", "username", "type", "ts", "message", "source"]]
+    exec_df = exec_df[["tenant", "username", "type", "ts", "message", "source", "status"]]
 
-    df = df[["tenant", "username", "type", "ts", "message", "source"]]
+    df = df[["tenant", "username", "type", "ts", "message", "source", "status"]]
 
     combined_df = pd.concat([df, exec_df], ignore_index=True)
     combined_df["date"] = combined_df["ts"].dt.date

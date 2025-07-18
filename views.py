@@ -6,43 +6,15 @@ import plotly.graph_objects as go
 import datetime
 from itertools import product
 import json
+from setup import graph_heading_with_info
 from load_data import fetch_instance_counts, fetch_run_data, fetch_temporal_activity_data, get_temporal_insights_from_ai, prepare_llm_friendly_json
-
-# --- Streamlit UI Setup ---
-def setup():
-    st.set_page_config(page_title="📊 Morpheus Activity Dashboard", layout="wide")
-    st.title("📊 Morpheus Activity Dashboard")
-
-# --- Sidebar Filters ---
-def setup_sidebar(df):
-    st.sidebar.header("Filters")
-    tenant_options = df["tenant"].unique().tolist()
-    selected_tenants = st.sidebar.multiselect("Select Tenant(s)", tenant_options, default=tenant_options)
-
-    min_date = datetime.date(2025, 1, 1)
-    max_date = datetime.date.today()
-
-    date_range = st.sidebar.slider(
-        "Select Date Range",
-        min_value=min_date,
-        max_value=max_date,
-        value=(min_date, max_date),
-        format="YYYY-MM-DD"
-    )
-    return selected_tenants, date_range
-
-# --- Filtered Data ---
-def filter_data(df, selected_tenants, date_range):
-    filtered_df = df[
-        (df["tenant"].isin(selected_tenants)) &
-        (df["date"] >= date_range[0]) &
-        (df["date"] <= date_range[1])
-    ].copy()
-    return filtered_df
 
 # --- Activity Timeline with Annotated Latest Activities ---
 def display_activity_chart(filtered_df):
-    st.subheader("Tenant Wise Activity Timeline")
+    graph_heading_with_info(
+        "Tenant Wise Activity Timeline",
+        "Shows each tenant's actions over time. Hover for details on each action."
+    )
 
     fig = px.scatter(
         filtered_df,
@@ -73,9 +45,38 @@ def display_activity_chart(filtered_df):
 
     st.plotly_chart(fig, use_container_width=True)
 
+# --- Action Success vs Failure Timeline ---
+def display_action_success_chart(filtered_df):
+    graph_heading_with_info(
+        "Activity Success vs Failure Timeline",
+        "Shows whether actions performed by tenants were successful or failed over time."
+    )
+
+
+    filtered_df["status"] = filtered_df["status"].apply(lambda x: "success" if x != "failed" and x else "failed")
+    color_map = {"success": "green", "failed" : "red"}
+
+    fig = px.scatter(
+        filtered_df,
+        x="ts",
+        y="tenant",
+        color="status",
+        color_discrete_map=color_map,
+        hover_data=["username", "message", "type"],
+        title="Action Outcomes Over Time",
+        height=500,
+        symbol="status",
+    )
+    fig.update_traces(marker=dict(size=12, symbol="circle"))
+
+    st.plotly_chart(fig, use_container_width=True)
+
 # --- Weekly Activity Overview with Tenant Comparison ---
 def display_weekly_activity(filtered_df):
-    st.subheader("Weekly Activity by Tenants")
+    graph_heading_with_info(
+        "Weekly Activity by Tenants",
+        "Weekly count of all user actions grouped by tenant."
+    )
     weeks_back = st.number_input("Showing data for past N weeks:", min_value=1, max_value=52, value=6, step=1)
 
     filtered_df["week_start"] = filtered_df["ts"] - pd.to_timedelta(filtered_df["ts"].dt.weekday, unit='D')
@@ -127,7 +128,10 @@ def display_weekly_activity(filtered_df):
 # --- Daily activity chart ---
 def display_daily_activity(pivot, filtered_df, selected_tenants):
     available_weeks = pivot.index.astype(str).tolist()
-    st.subheader("View Daily Activity Across Tenants")
+    graph_heading_with_info(
+        "View Daily Activity Across Tenants",
+        "Displays tenant-wise activity distributed across weekdays. Useful for workload patterns."
+    )
     select_all = st.checkbox("Select All Weeks", value=True)
 
     if select_all:
@@ -194,7 +198,10 @@ def display_daily_activity(pivot, filtered_df, selected_tenants):
 
 # --- Top N Active Users per Tenant ---
 def display_top_active_users(combined_daywise):
-    st.subheader("Top N Active Users per Tenant")
+    graph_heading_with_info(
+        "Top N Active Users per Tenant",
+        "Ranks users based on number of actions performed within selected weeks."
+    )
     top_n = st.number_input("Select how many top users to show per tenant:", min_value=1, max_value=10, value=2, step=1)
 
     user_activity = (
@@ -288,11 +295,12 @@ def instance_type_distribution(selected_tenants, date_range, selected_weeks, ava
         (instance_df["date"] <= date_range[1])
     ]
 
-    st.markdown("""
-        <div style='display: flex; align-items: center; gap: 8px;'>
-            <h3 style='margin: 0;'>Total Instances per Tenant</h3>
-        </div>
-    """, unsafe_allow_html=True)
+    graph_heading_with_info(
+        "Total Instances per Tenant",
+        "This table shows the cumulative instances for the selected date range.<br>"
+        "<span style='color:limegreen;'>+N</span>: Instances provisioned in selected weeks.<br>"
+        "<span style='color:red;'>-N</span>: Instances deleted in selected weeks."
+    )
 
     # --- Summary Table ---
     summary_data = []
@@ -346,7 +354,10 @@ def instance_type_distribution(selected_tenants, date_range, selected_weeks, ava
 
     col1, col2 = st.columns([0.8, 0.2])
     with col1:
-        st.subheader("Filtered Instance Type Distribution")
+        graph_heading_with_info(
+            "Filtered Instance Type Distribution",
+            "Breakdown of instance types provisioned or deleted for each tenant during the selected timeframe."
+        )
     with col2:
         show_deleted = st.checkbox("Include Deleted", value=False)
 
@@ -406,7 +417,10 @@ def instance_type_distribution(selected_tenants, date_range, selected_weeks, ava
 # --- Gantt Chart ---
 def display_tenant_gantt_chart(selected_tenants, date_range, selected_weeks, available_weeks, select_all):
 
-    st.subheader("Tenant-Level Gantt Chart of Runs (Avg CPU %) Per Week")
+    graph_heading_with_info(
+        "Tenant-Level Gantt Chart of Runs (Avg CPU %)",
+        "Visualizes weekly run durations per tenant and their average CPU usage."
+    )
 
     runs_df = fetch_run_data()
     instance_df = fetch_instance_counts()
@@ -484,7 +498,11 @@ def display_tenant_gantt_chart(selected_tenants, date_range, selected_weeks, ava
 
 # --- Insights Section ---
 def insights(selected_tenants):
-    with st.expander("🧠 Tenant-wise Temporal Behavior Insights (AI Generated)"):
+    graph_heading_with_info(
+        "Tenant-wise Temporal Behavior Insights (AI Generated)",
+        "These insights are derived from deepseek-chat-v3-0324 model analyzing temporal activity across tenants, highlighting anomalies, patterns, and inefficiencies."
+    )
+    with st.expander("View AI Insight for selected Tenant(s)"):
         tenants = selected_tenants if selected_tenants else None
         temp_df = fetch_temporal_activity_data(tenants)
 
@@ -505,7 +523,10 @@ def insights(selected_tenants):
 
 # --- BCG Matrix ---
 def display_bcg_matrix():
-    st.subheader("BCG Matrix: User VM Provisioning vs CPU Usage")
+    graph_heading_with_info(
+        "BCG Matrix: User VM Provisioning vs CPU Usage",
+        "Shows user behavior in terms of VM provisioning vs average CPU utilization."
+    )
 
     inst_df = fetch_instance_counts()
     run_df = fetch_run_data()
