@@ -10,7 +10,6 @@ if __name__ == "__main__":
     views.insights(selected_tenants)
     filtered_df = setup.filter_data(df, selected_tenants, date_range)
     views.display_activity_chart(filtered_df)
-    views.display_action_success_chart(filtered_df)
     pivot = views.display_weekly_activity(filtered_df)
     combined_daywise, selected_weeks, available_weeks, select_all = views.display_daily_activity(pivot, filtered_df, selected_tenants)
     views.display_bcg_matrix()
