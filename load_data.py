@@ -164,13 +164,15 @@ def fetch_temporal_activity_data(selected_tenants=None):
         query = """
         // 1. ACTIONS
         MATCH (t:Tenant)<-[:BELONGS_TO]-(u:User)
-        OPTIONAL MATCH (u)-[:PERFORMED]->(a:Action)-[:PROVISIONS]->(i:Instance)
+        OPTIONAL MATCH (u)-[:PERFORMED]->(a:Action)
+        OPTIONAL MATCH (a)-[:PROVISIONS|DELETES]->(i:Instance)
         WHERE $tenants IS NULL OR t.name IN $tenants
         RETURN 
         t.name AS tenant,
         u.username AS user,
         a.ts AS action_ts,
         a.type AS action_type,
+        a.message AS message,
         NULL AS exec_start,
         NULL AS exec_duration_in_seconds,
         NULL AS exec_status,
@@ -194,6 +196,7 @@ def fetch_temporal_activity_data(selected_tenants=None):
         u.username AS user,
         NULL AS action_ts,
         NULL AS action_type,
+        NULL AS message,
         e.startDate AS exec_start,
         e.`duration (in seconds)` AS exec_duration_in_seconds,
         e.status AS exec_status,
@@ -217,6 +220,7 @@ def fetch_temporal_activity_data(selected_tenants=None):
         u.username AS user,
         NULL AS action_ts,
         NULL AS action_type,
+        NULL AS message,
         NULL AS exec_start,
         NULL AS exec_duration_in_seconds,
         NULL AS exec_status,
@@ -264,6 +268,7 @@ def prepare_llm_friendly_json(df):
                     "type": "action",
                     "ts": row["action_ts"].isoformat(),
                     "action_type": row.get("action_type"),
+                    "message": row.get("message"),
                     "instance_name": row.get("instance_name"),
                     "instance_id": row.get("instance_id"),
                     "instance_type": row.get("instance_type"),

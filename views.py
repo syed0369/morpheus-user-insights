@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import requests
+from llm import rag_engine
 import plotly.express as px
 import plotly.graph_objects as go
 import datetime
@@ -549,8 +549,7 @@ def display_tenant_gantt_chart(selected_tenants, date_range, selected_weeks, ava
                     "end": True,
                     "avg_cpu": True,
                     "total_instances": True,
-                    "running_instances": True,
-                    "run_count": True
+                    "running_instances": True
                 }
             )
 
@@ -669,7 +668,7 @@ def display_bcg_matrix():
 
     st.plotly_chart(fig, use_container_width=True)
 
-def chatbot_ui(api_url="http://localhost:5000/rag"):
+def chatbot_ui():
     with st.expander("💬 Chatbot - Ask about tenant patterns & anomalies", expanded=True):
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
@@ -688,12 +687,11 @@ def chatbot_ui(api_url="http://localhost:5000/rag"):
                 waiting_placeholder = st.empty()
                 waiting_placeholder.markdown("*Searching for insights...*")
 
-            try:
-                resp = requests.post(api_url, json={"query": user_query, "mode": "hybrid"}, timeout=60)
-                answer = resp.json().get("answer", "No response from API.")
-            except Exception as e:
-                answer = f"Error: {e}"
+                try:
+                    answer = rag_engine.rag_hybrid(user_query)  # or rag_summary_only, or normal_chat
+                except Exception as e:
+                    answer = f"Error: {e}"
 
-            waiting_placeholder.markdown(answer)
+                waiting_placeholder.markdown(answer)
 
             st.session_state.chat_history.append({"role": "assistant", "content": answer})

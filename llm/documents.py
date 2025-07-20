@@ -3,7 +3,7 @@ from sentence_transformers import SentenceTransformer
 
 embed_model = SentenceTransformer('all-MiniLM-L6-v2')
 
-with open("neo4j_query_table_data_2025-7-19.json", "r") as f:
+with open("neo4j_query_table_data.json", "r") as f:
     neo4j_data = json.load(f)
 
 raw_chunks = []
@@ -13,6 +13,7 @@ Tenant: {record['tenant']}
 User: {record['user']}
 Action Timestamp: {record.get('action_ts')}
 Action Type : {record.get('action_type')}
+Message: {record.get('message')}
 Execution Start: {record.get('exec_start')}
 Duration: {record.get('exec_duration')}
 Status: {record.get('exec_status')}
