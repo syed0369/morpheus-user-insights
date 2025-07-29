@@ -1,26 +1,82 @@
 [
-        {
-            "nl_query": "Instances provisioned or deleted by tenant `tenant name`",
-            "cypher": "MATCH (t:Tenant {name: $tenant_name})<-[:BELONGS_TO]-(u:User) OPTIONAL MATCH (u)-[:PERFORMED]->(a:Action) OPTIONAL MATCH (a)-[:PROVISIONS|DELETES]->(i:Instance) RETURN DISTINCT i.name AS instance_name, a.type AS action_type, a.ts AS action_time, u.username AS user ORDER BY a.ts DESC "
-        },
-        {
-            "nl_query": "Instances with specific plan and tenant and deleted by user",
-            "cypher": " MATCH (t:Tenant {name: $tenant_name})<-[:BELONGS_TO]-(u:User) OPTIONAL MATCH (u)-[:PERFORMED]->(a:Action) OPTIONAL MATCH (a)-[:PROVISIONS|DELETES]->(i:Instance) WHERE $plan_name IS NULL OR $plan_name = \"\" OR i.plan = $plan_name RETURN DISTINCT i.name AS instance_name, u.username AS user"
-        },
-        {
-            "nl_query": "Number of instances per plan",
-            "cypher": "MATCH (i:Instance) RETURN i.plan AS plan, COUNT(i) AS instance_count ORDER BY instance_count DESC"
-        },
-        {
-            "nl_query": "Number of instances of a particular instance type",
-            "cypher": " MATCH (i:Instance {instance_type: $instance_type}) RETURN COUNT(i) AS instance_count"
-        },
-        {
-            "nl_query": "Number of instances per tenant",
-            "cypher": " MATCH (t:Tenant)<-[:BELONGS_TO]-(u:User)-[:PERFORMED]->(:Action)-[:PROVISIONS]->(i:Instance) RETURN t.name AS tenant_name, COUNT(i) AS instance_count ORDER BY instance_count DESC "
-        },
-        {
-            "nl_query": "Most popular plan",
-            "cypher": " MATCH (i:Instance) RETURN i.plan AS plan, COUNT(*) AS count ORDER BY count DESC LIMIT 1"
-        }
-    ]
+  {
+    "nl_query": "Instances provisioned by tenant `tenant_name`",
+    "cypher": "MATCH (t:Tenant {name: $tenant_name})<-[:BELONGS_TO]-(u:User)-[:PERFORMED]->(a:Action)-[:PROVISIONS]->(i:Instance) RETURN i.name AS instance_name, toString(a.ts) AS timestamp, u.username AS user ORDER BY a.ts DESC"
+  },
+  {
+    "nl_query": "Instances deleted by tenant `tenant_name`",
+    "cypher": "MATCH (t:Tenant {name: $tenant_name})<-[:BELONGS_TO]-(u:User)-[:PERFORMED]->(a:Action)-[:DELETES]->(i:Instance) RETURN i.name AS instance_name, toString(a.ts) AS timestamp, u.username AS user ORDER BY a.ts DESC"
+  },
+  {
+    "nl_query": "All instances and their lifecycle actions for tenant `tenant_name`",
+    "cypher": "MATCH (t:Tenant {name: $tenant_name})<-[:BELONGS_TO]-(u:User)-[:PERFORMED]->(a:Action)-[:PROVISIONS|DELETES]->(i:Instance) RETURN i.name AS instance_name, a.type AS action_type, toString(a.ts) AS timestamp, u.username AS user ORDER BY a.ts DESC"
+  },
+  {
+    "nl_query": "Count of actions performed by each user",
+    "cypher": "MATCH (u:User)-[:PERFORMED]->(a:Action) RETURN u.username AS user, COUNT(a) AS action_count ORDER BY action_count DESC"
+  },
+  {
+    "nl_query": "Top users by number of provisioned instances",
+    "cypher": "MATCH (u:User)-[:PERFORMED]->(a:Action)-[:PROVISIONS]->(i:Instance) RETURN u.username AS user, COUNT(i) AS provision_count ORDER BY provision_count DESC"
+  },
+  {
+    "nl_query": "Top tenants by number of deletions",
+    "cypher": "MATCH (t:Tenant)<-[:BELONGS_TO]-(u:User)-[:PERFORMED]->(a:Action)-[:DELETES]->(i:Instance) RETURN t.name AS tenant, COUNT(i) AS delete_count ORDER BY delete_count DESC"
+  },
+  {
+    "nl_query": "Executions by tenant `tenant_name` with status and duration",
+    "cypher": "MATCH (t:Tenant {name: $tenant_name})<-[:BELONGS_TO]-(u:User)-[:CREATED]->(j:Job)-[:HAS_EXECUTION]->(e:Execution) RETURN toString(e.startDate) AS exec_start, e.`duration (in seconds)` AS duration, e.status AS status, j.name AS job_name, u.username AS user ORDER BY e.startDate DESC"
+  },
+  {
+    "nl_query": "Average execution duration per tenant",
+    "cypher": "MATCH (t:Tenant)<-[:BELONGS_TO]-(u:User)-[:CREATED]->(j:Job)-[:HAS_EXECUTION]->(e:Execution) RETURN t.name AS tenant, avg(e.`duration (in seconds)`) AS avg_exec_duration ORDER BY avg_exec_duration DESC"
+  },
+  {
+    "nl_query": "Jobs created by user `user_name`",
+    "cypher": "MATCH (u:User {username: $user_name})-[:CREATED]->(j:Job) RETURN j.name AS job_name, toString(j.ts) AS timestamp ORDER BY j.ts DESC"
+  },
+  {
+    "nl_query": "Executions with failed status by tenant `tenant_name`",
+    "cypher": "MATCH (t:Tenant {name: $tenant_name})<-[:BELONGS_TO]-(u:User)-[:CREATED]->(j:Job)-[:HAS_EXECUTION]->(e:Execution) WHERE e.status = 'failed' RETURN toString(e.startDate) AS exec_start, j.name AS job_name, u.username AS user"
+  },
+  {
+    "nl_query": "Instances and their average CPU usage per run for tenant `tenant_name`",
+    "cypher": "MATCH (t:Tenant {name: $tenant_name})<-[:BELONGS_TO]-(u:User)-[:PERFORMED]->(:Action)-[:PROVISIONS]->(i:Instance)-[:HAS_RUN]->(r:Run) RETURN i.name AS instance, r.avg_cpu_usage_percent AS avg_cpu, r.start_date AS run_start, r.end_date AS run_end"
+  },
+  {
+    "nl_query": "Recent runs with highest CPU usage",
+    "cypher": "MATCH (i:Instance)-[:HAS_RUN]->(r:Run) RETURN i.name AS instance, r.avg_cpu_usage_percent AS avg_cpu, r.start_date AS run_start ORDER BY r.avg_cpu_usage_percent DESC LIMIT 10"
+  },
+  {
+    "nl_query": "Top 10 tenants by number of job executions",
+    "cypher": "MATCH (t:Tenant)<-[:BELONGS_TO]-(u:User)-[:CREATED]->(j:Job)-[:HAS_EXECUTION]->(e:Execution) RETURN t.name AS tenant, COUNT(e) AS exec_count ORDER BY exec_count DESC LIMIT 10"
+  },
+  {
+    "nl_query": "Execution success rate per tenant",
+    "cypher": "MATCH (t:Tenant)<-[:BELONGS_TO]-(u:User)-[:CREATED]->(j:Job)-[:HAS_EXECUTION]->(e:Execution) RETURN t.name AS tenant, COUNT(CASE WHEN e.status = 'complete' THEN 1 END) * 1.0 / COUNT(e) AS success_rate ORDER BY success_rate DESC"
+  },
+  {
+    "nl_query": "Instance lifecycle activity summary for tenant `tenant_name`",
+    "cypher": "MATCH (t:Tenant {name: $tenant_name})<-[:BELONGS_TO]-(u:User)-[:PERFORMED]->(a:Action)-[:PROVISIONS|DELETES]->(i:Instance) RETURN i.name AS instance, a.type AS action_type, toString(a.ts) AS timestamp, u.username AS user ORDER BY a.ts DESC"
+  },
+  {
+    "nl_query": "Most recently provisioned instances",
+    "cypher": "MATCH (a:Action)-[:PROVISIONS]->(i:Instance) RETURN i.name AS instance, toString(a.ts) AS provision_time ORDER BY a.ts DESC LIMIT 10"
+  },
+  {
+    "nl_query": "Users who have executed jobs the most",
+    "cypher": "MATCH (u:User)-[:CREATED]->(j:Job)-[:HAS_EXECUTION]->(e:Execution) RETURN u.username AS user, COUNT(e) AS execution_count ORDER BY execution_count DESC"
+  },
+  {
+    "nl_query": "List of all jobs with latest execution status",
+    "cypher": "MATCH (j:Job)-[:HAS_EXECUTION]->(e:Execution) RETURN j.name AS job_name, e.status AS status, toString(e.startDate) AS exec_start ORDER BY exec_start DESC"
+  },
+  {
+    "nl_query": "Failed jobs and their owners",
+    "cypher": "MATCH (u:User)-[:CREATED]->(j:Job)-[:HAS_EXECUTION]->(e:Execution) WHERE e.status = 'FAILED' RETURN j.name AS job_name, u.username AS user, toString(e.startDate) AS exec_start"
+  },
+  {
+    "nl_query": "Users who have created the most jobs",
+    "cypher": "MATCH (u:User)-[:CREATED]->(j:Job) RETURN u.username AS user, COUNT(j) AS job_count ORDER BY job_count DESC"
+  }
+]

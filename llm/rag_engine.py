@@ -26,12 +26,12 @@ with open(RAW_CHUNKS_FILE, "r") as f:
 with open(SUMMARY_CHUNKS_FILE, "r") as f:
     summary_chunks = json.load(f)
 
-def retrieve_top_k(query: str, index, chunks, top_k=11):
-    query_emb = embed_model.encode([query])
+def retrieve_top_k(query: str, index, chunks, top_k=100):
+    query_emb = embed_model.encode([query], normalize_embeddings=True)
     _, I = index.search(query_emb, top_k)
     return [chunks[i] for i in I[0]]
 
-def retrieve_hybrid(query: str, top_k=11):
+def retrieve_hybrid(query: str, top_k=100):
     raw_results = retrieve_top_k(query, raw_index, raw_chunks, top_k)
     summary_results = retrieve_top_k(query, summary_index, summary_chunks, top_k)
     return raw_results + summary_results
@@ -51,24 +51,24 @@ def normal_chat(user_query: str) -> str:
 def rag_summary_only(user_query: str) -> str:
     context = "\n\n".join(retrieve_top_k(user_query, summary_index, summary_chunks))
     prompt = f"""
-You are analyzing summarized tenant insights.
+                You are analyzing summarized tenant insights.
 
-Context:
-{context}
+                Context:
+                {context}
 
-Question: {user_query}
-Answer concisely.
-"""
+                Question: {user_query}
+                Answer concisely.
+            """
     return query_deepseek(prompt)
 
 def rag_hybrid(user_query: str) -> str:
     context = "\n\n".join(retrieve_hybrid(user_query))
     prompt = f"""
-You are analyzing tenant activity logs. This includes raw logs and preprocessed summaries.
+                You are analyzing tenant activity logs. This includes raw logs and preprocessed summaries.
 
-Context:
-{context}
+                Context:
+                {context}
 
-Question: {user_query}
-"""
+                Question: {user_query}
+            """
     return query_deepseek(prompt)

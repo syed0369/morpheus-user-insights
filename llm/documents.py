@@ -9,21 +9,21 @@ with open("neo4j_query_table_data.json", "r") as f:
 raw_chunks = []
 for record in neo4j_data:
     text = f"""
-Tenant: {record['tenant']}
-User: {record['user']}
-Action Timestamp: {record.get('action_ts')}
-Action Type : {record.get('action_type')}
-Message: {record.get('message')}
-Execution Start: {record.get('exec_start')}
-Duration: {record.get('exec_duration')}
-Status: {record.get('exec_status')}
-Run Start: {record.get('run_start')}
-Run End: {record.get('run_end')}
-Avg CPU: {record.get('run_avg_cpu')}
-Instance: {record.get('instance_name')} (ID: {record.get('instance_id')})
-Instance Type: {record.get('instance_type')}
-Instance Plan: {record.get('instance_plan')}
-"""
+        Tenant: {record['tenant']}
+        User: {record['user']}
+        Action Timestamp: {record.get('action_ts')}
+        Action Type : {record.get('action_type')}
+        Message: {record.get('message')}
+        Execution Start: {record.get('exec_start')}
+        Duration: {record.get('exec_duration')}
+        Status: {record.get('exec_status')}
+        Run Start: {record.get('run_start')}
+        Run End: {record.get('run_end')}
+        Avg CPU: {record.get('run_avg_cpu')}
+        Instance: {record.get('instance_name')} (ID: {record.get('instance_id')})
+        Instance Type: {record.get('instance_type')}
+        Instance Plan: {record.get('instance_plan')}
+    """
     raw_chunks.append(text.strip())
     print(text)
 print(f"✅ Processed {len(raw_chunks)} raw log chunks")
@@ -48,7 +48,7 @@ summary_chunks = chunk_text(summary_text)
 print(f"Processed {len(summary_chunks)} summary chunks")
 
 def build_faiss(chunks, index_file):
-    embeddings = embed_model.encode(chunks)
+    embeddings = embed_model.encode(chunks, normalize_embeddings=True)
     dim = embeddings.shape[1]
     index = faiss.IndexFlatL2(dim)
     index.add(np.array(embeddings))

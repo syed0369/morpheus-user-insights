@@ -7,7 +7,7 @@ if __name__ == "__main__":
     setup.setup()
     df = load_combined_data()
     selected_tenants, date_range = setup.setup_sidebar(df)
-    views.insights(selected_tenants)
+    # views.insights(selected_tenants)
     filtered_df = setup.filter_data(df, selected_tenants, date_range)
     views.display_activity_chart(filtered_df)
     pivot = views.display_weekly_activity(filtered_df)
