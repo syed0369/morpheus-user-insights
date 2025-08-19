@@ -73,10 +73,22 @@
   },
   {
     "nl_query": "Failed jobs and their owners",
-    "cypher": "MATCH (u:User)-[:CREATED]->(j:Job)-[:HAS_EXECUTION]->(e:Execution) WHERE e.status = 'FAILED' RETURN j.name AS job_name, u.username AS user, toString(e.startDate) AS exec_start"
+    "cypher": "MATCH (u:User)-[:CREATED]->(j:Job)-[:HAS_EXECUTION]->(e:Execution) WHERE e.status = 'failed' RETURN j.name AS job_name, u.username AS user, toString(e.startDate) AS exec_start"
   },
   {
     "nl_query": "Users who have created the most jobs",
     "cypher": "MATCH (u:User)-[:CREATED]->(j:Job) RETURN u.username AS user, COUNT(j) AS job_count ORDER BY job_count DESC"
+  },
+  {
+    "nl_query": "Tenants with the most active users",
+    "cypher": "MATCH (t:Tenant)<-[:BELONGS_TO]-(u:User) RETURN t.name AS tenant, COUNT(u) AS user_count ORDER BY user_count DESC"
+  },
+  {
+    "nl_query": "Most active plan by tenant `tenant_name`",
+    "cypher": "MATCH (t:Tenant {name: $tenant_name})<-[:BELONGS_TO]-(u:User)-[:PERFORMED]->(a:Action)-[:PROVISIONS]->(i:Instance) RETURN i.plan AS plan, COUNT(i) AS instance_count ORDER BY instance_count DESC LIMIT 1"
+  },
+  {
+    "nl_query": "Most active plan",
+    "cypher": "MATCH (i:Instance) RETURN i.plan AS plan, COUNT(i) AS instance_count ORDER BY instance_count DESC LIMIT 1"
   }
 ]
